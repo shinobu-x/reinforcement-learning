@@ -3,17 +3,16 @@ import torch
 
 class ReplayBuffer(object):
     def __init__(self, state_space, action_space, capacity):
+        self.device = torch.device('cuda' if torch.cuda.is_available else 'cpu')
         self.capacity = capacity
         self.buffer = 0
         self.position = 0
         self.batch_size = 0
         self.state = np.zeros((capacity, state_space))
         self.action = np.zeros((capacity, action_space))
-        self.reward = np.zeros((capacity, 1))
         self.next_state = np.zeros((capacity, state_space))
+        self.reward = np.zeros((capacity, 1))
         self.not_done = np.zeros((capacity, 1))
-        self.device = torch.device('cuda'
-                if torch.cuda.is_available() else 'cpu')
 
     def buffered(self, batch_size):
         self.batch_size = batch_size

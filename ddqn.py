@@ -5,7 +5,6 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
-from replay_buffer import ReplayBuffer
 
 # Dueling Network Architectures for Deep Reinforcement Learning
 # https://arxiv.org/abs/1511.06581
@@ -29,9 +28,10 @@ class Agent(nn.Module):
 
 class DDQN(object):
     def __init__(self, state_space, action_space, gamma = 0.99):
+        self.action_space = action_space
         self.device = torch.device('cuda' if torch.cuda.is_available()
                 else 'cpu')
-        self.policy = Agent(state_space, action_space)
+        self.policy = Agent(state_space, action_space).to(self.device)
         self.policy_optimizer = optim.Adam(self.policy.parameters(),
                 weight_decay = 1e-1)
         self.epsilon = 0.09
@@ -40,45 +40,29 @@ class DDQN(object):
     def select_action(self, state):
         sample = random.random()
         if sample > self.epsilon:
-            state = torch.FloatTensor(state.reshape(1, -1))
+            state = torch.FloatTensor(state.reshape(1, -1)).to(self.device)
             return self.policy(state).max(1)[1].view(1, 1).detach().item()
         else:
-            return torch.tensor([[random.randrange(action_space)]],
+            return torch.tensor([[random.randrange(self.action_space)]],
                     dtype = torch.long).item()
 
-    def train(self, replay_buffer):
-        state, action, next_state, reward, not_done = replay_buffer.sample()
+    def train(self, replay_buffer, prioritized = False):
+        if prioritized:
+            state, action, next_state, reward, not_done, weight = \
+                    replay_buffer.sample()
+        else:
+            state, action, next_state, reward, not_done = replay_buffer.sample()
         Q_current = self.policy(state)
         Q_current = Q_current.gather(0, action).squeeze(1)
         Q_target = self.policy(next_state)
         Q_target = Q_target.max(1)[0].detach()
         Q_target = reward + self.gamma * Q_target
         self.policy_optimizer.zero_grad()
-        loss = F.mse_loss(Q_current.float(), Q_target.float())
+        if prioritized:
+            loss = torch.abs(Q_current.float() - Q_target.float()) * \
+                    torch.from_numpy(weight).to(self.device)
+            loss = loss.mean()
+        else:
+            loss = F.mse_loss(Q_current.float(), Q_target.float())
         loss.backward()
         self.policy_optimizer.step()
-
-if __name__ == '__main__':
-    env = gym.make('CartPole-v0')
-    state_space = env.observation_space.shape[0]
-    action_space = env.action_space.n # num_action env.action_space.shape[0]
-    max_episode_steps = env._max_episode_steps
-    policy = DDQN(state_space, action_space)
-    episode_reward = 0
-    episode_timesteps = 0
-    capacity = 100000
-    use_replay_buffer = 1000
-    batch_size = 32
-    replay_buffer = ReplayBuffer(state_space, action_space, capacity)
-    state, done = env.reset(), False
-    for t in range(int(10000)):
-        episode_timesteps += 1
-        action = policy.select_action(state)
-        #action = select_action(state)
-        next_state, reward, done, _ = env.step(action)
-        not_done = float(done) if episode_timesteps < max_episode_steps else 0
-        episode_reward += reward
-        replay_buffer.store(state, action, next_state, reward, not_done)
-        state = next_state
-        if replay_buffer.buffered(64):
-            policy.train(replay_buffer)
