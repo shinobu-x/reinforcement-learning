@@ -84,14 +84,15 @@ class TRPO(object):
         self.device = torch.device('cuda' if torch.cuda.is_available()
                 else 'cpu')
         self.actor = Actor(self.state_space, self.action_space).to(self.device)
-        self.critic = CriticExtension(Critic(self.state_space), lr = 0.1)
+        self.critic = CriticExtension(Critic(self.state_space), lr = 0.1
+                ).to(self.device)
         self.num_episodes = num_episodes
         self.epsilon = epsilon
         self.eta = eta
         self.gamma = gamma
 
     def select_action(self, state):
-        state = torch.Tensor(state).unsqueeze(0)
+        state = torch.Tensor(state).unsqueeze(0).to(self.device)
         probabilities = self.actor(torch.autograd.Variable(state,
             requires_grad = True))
         action = probabilities.multinomial(1)
