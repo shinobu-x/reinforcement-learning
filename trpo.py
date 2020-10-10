@@ -45,6 +45,8 @@ class Critic(nn.Module):
 class CriticExtension(nn.Module):
     def __init__(self, model, lr):
         super(CriticExtension, self).__init__()
+        self.device = torch.device('cuda' if torch.cuda.is_available()
+                else 'cpu')
         self.model = model
         self.lr = lr
 
