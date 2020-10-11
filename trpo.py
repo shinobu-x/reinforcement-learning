@@ -56,7 +56,7 @@ class CriticExtension(nn.Module):
     def fit(self, states, targets):
         def closure():
             predicts = self.predict(states)
-            loss = F.mse_loss(predicts, targets)
+            loss = torch.pow(predicts - targets, 2).sum()
             self.optimizer.zero_grad()
             loss.backward()
             return loss
@@ -239,7 +239,6 @@ class TRPO(object):
             # Compute the gradient of the surrogate loss
             self.actor.zero_grad()
             surrogate_loss.backward(retain_graph = True)
-            # Parameter to vector
             policy_gradient = p2v(param.grad for param
                     in self.actor.parameters()).squeeze(0)
             if policy_gradient.nonzero().size()[0]:
@@ -286,4 +285,4 @@ class TRPO(object):
                     ('Evaluation after', evaluation_after)])
                 for k, v in diagnostics.items():
                     print('{}: {}'.format(k, v))
-            return total_reward
+        return total_reward
