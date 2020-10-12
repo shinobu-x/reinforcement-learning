@@ -27,7 +27,7 @@ class DQN(object):
         self.device = torch.device('cuda' if torch.cuda.is_available()
                 else 'cpu')
         self.policy = Agent(state_space, action_space).to(self.device)
-        self.policy_optimizer = optim.Adam(self.policy.parameters(),
+        self.policy_optimizer = optim.Adam(self.policy.parameters(), lr = 3e-4,
                 weight_decay = 1e-1)
         self.epsilon = 0.09
         self.gamma = gamma
