@@ -107,11 +107,11 @@ class PrioritizedReplayBuffer:
       weight = weights / weights.max()
     dynamics = [trajectories[i] for i in range(self.batch_size)]
     dynamics = self.dynamics(*zip(*trajectories))
-    return (torch.FloatTensor(dynamics.state),
-            torch.LongTensor(dynamics.action).unsqueeze(1),
-            torch.FloatTensor(dynamics.next_state),
-            torch.FloatTensor(dynamics.reward),
-            torch.FloatTensor(dynamics.not_done),
+    return (torch.FloatTensor(dynamics.state).to(self.device),
+            torch.LongTensor(dynamics.action).to(self.device).unsqueeze(1),
+            torch.FloatTensor(dynamics.next_state).to(self.device),
+            torch.FloatTensor(dynamics.reward).to(self.device),
+            torch.FloatTensor(dynamics.not_done).to(self.device),
             weight)
 
   def update(self, index, delta):
