@@ -7,8 +7,8 @@ import torch.optim as optim
 import torch.nn.functional as F
 from collections import OrderedDict
 from copy import deepcopy
-from utils.trpo import (p2v, v2p, flatten, compute_discounted_reward,
-                        explained_variance_1d)
+from utils import (p2v, v2p, flatten, compute_discounted_reward,
+                   explained_variance_1d)
 
 # Trust Region Policy Optimization
 # https://arxiv.org/abs/1502.05477

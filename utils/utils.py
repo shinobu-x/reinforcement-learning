@@ -26,3 +26,8 @@ def explained_variance_1d(y_predict, y_target):
     variance = np.var(y_target)
     return np.nan if variance == 0 \
             else 1 - np.var(y_target - y_predict) / variance
+
+def compute_normalized_reward(reward):
+    mean = reward.mean()
+    std = reward.std()
+    return (reward - mean) / (std + 1e-8)
