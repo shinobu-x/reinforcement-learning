@@ -61,24 +61,9 @@ class DoubleCritic(nn.Module):
         super(DoubleCritic, self).__init__()
         self.Q1 = Critic(state_space, action_space)
         self.Q2 = Critic(state_space, action_space)
-        '''
-        self.q1_l1 = nn.Linear(state_space + action_space, 100)
-        self.q1_l2 = nn.Linear(100, 500)
-        self.q1_l3 = nn.Linear(500, 1)
-        self.q2_l1 = nn.Linear(state_space + action_space, 100)
-        self.q2_l2 = nn.Linear(100, 500)
-        self.q2_l3 = nn.Linear(500, 1)
-        '''
+
     def forward(self, state, action):
         x = torch.cat([state, action], 2)
-        '''
-        q1 = F.relu(self.q1_l1(x))
-        q1 = F.relu(self.q1_l2(q1))
-        q1 = self.q1_l3(q1)
-        q2 = F.relu(self.q2_l1(x))
-        q2 = F.relu(self.q2_l2(q2))
-        q2 = self.q2_l2(q2)
-        '''
         return self.Q1.forward(x), self.Q2.forward(x)
 
 class SAC(object):
@@ -99,7 +84,6 @@ class SAC(object):
                 lr = 3e-4, weight_decay = 1e-1)
         self.critic_target_optimizer = optim.Adam(
                 self.critic_target.parameters(), lr = 3e-4, weight_decay = 1e-1)
-        #self.critic_target.load_state_dict(self.critic.state_dict())
         self.critic_target = deepcopy(self.critic)
         for param in self.critic_target.parameters():
             param.requires_grad = False
