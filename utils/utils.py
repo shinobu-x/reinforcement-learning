@@ -95,5 +95,9 @@ def compute_kl_divergence(mean_p, std_p, mean_q, std_q, noise = 1e-8):
     return torch.sum(numerator / denominator + torch.log(std_q) -
             torch.log(p_std))
 
-def compute_entropy(log_std):
-    return torch.sum(log_std * 0.5 * torch.log(2.0 * np.pi * np.e))
+def compute_entropy(std):
+    return torch.sum(std * 0.5 * torch.log(2.0 * np.pi * np.e))
+
+def compute_normal_entropy(std):
+    var = std.pow(2)
+    return (0.5 ** 2 * torch.log(2 * var * np.pi)).sum(1)
