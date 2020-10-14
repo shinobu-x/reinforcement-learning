@@ -1,4 +1,3 @@
-import gym
 import numpy as np
 import random
 import torch
@@ -50,13 +49,10 @@ class CriticExtension(nn.Module):
         self.model = model
         self.lr = lr
 
-    def forward(self, state):
-        return self.model.forward(state)
-
     def fit(self, states, targets):
         def closure():
             predicts = self.predict(states)
-            loss = torch.pow(predicts - targets, 2).sum()
+            loss = F.mse_loss(predicts, targets)
             self.optimizer.zero_grad()
             loss.backward()
             return loss
@@ -71,15 +67,16 @@ class CriticExtension(nn.Module):
                 return
 
     def predict(self, states):
-        return self.forward(torch.cat([torch.autograd.Variable(torch.Tensor(
-            state).to(self.device)).unsqueeze(0) for state in states]))
+        return self.model.forward(torch.cat([torch.autograd.Variable(
+            torch.Tensor(state).to(self.device)).unsqueeze(0) for state \
+            in states]))
 
 class TRPO(object):
     def __init__(self, env, num_episodes = 100, epsilon = 0.09, eta = 1e-3,
             gamma = 0.99):
         '''
         num_episodes: A number of episodes
-        epsilon: Constraint on KL divergence
+        epsilon: KL constraint
         gamma: Discount factor
         eta: Penalty of the policy
         '''
@@ -142,12 +139,12 @@ class TRPO(object):
     def compute_average_kl_divergence(self, model):
         states = torch.cat([torch.autograd.Variable(torch.Tensor(state).to(
             self.device)).unsqueeze(0) for state in self.states])
-        policy_new = model(states) + 1e-8
+        policy_new = model(states) #.detach() + 1e-8
         policy_old = self.actor(states)
         return torch.sum(policy_old *
                 torch.log(policy_old / policy_new), 1).mean()
 
-    def compute_hessian_vector_product(self, gradient):
+    def hessian_vector_product(self, gradient):
         self.actor.zero_grad()
         average_kl_divergence = self.compute_average_kl_divergence(self.actor)
         kl_gradient = torch.autograd.grad(average_kl_divergence,
@@ -166,10 +163,10 @@ class TRPO(object):
         x = np.zeros_like(gradient.data.cpu().numpy())
         r2 = r.double().dot(r.double())
         for _ in range(10): # Run conjugate gradient algorithm
-            z = self.compute_hessian_vector_product(torch.autograd.Variable(p)
+            z = self.hessian_vector_product(torch.autograd.Variable(p)
                     ).squeeze(0)
             v = r2 / p.double().dot(z.double())
-            x += (v * p).cpu().numpy()
+            x += v.cpu().numpy() * p.cpu().numpy()
             r -= v * z
             r3 = r.double().dot(r.double())
             mu = r3 / r2
@@ -214,16 +211,15 @@ class TRPO(object):
                 else (len(actions) / batch_size) + 1
         for batch in range(int(num_batches)):
             self.states = states[batch * batch_size:(batch + 1) * batch_size]
-            self.discounted_rewards = discounted_rewards[batch * batch_size:
-                    (batch + 1) * batch_size]
-            self.actions = actions[batch * batch_size:
-                    (batch + 1) * batch_size]
-            self.action_probabilities = action_probabilities[batch * batch_size:
-                    (batch + 1) * batch_size]
+            self.discounted_rewards = discounted_rewards[batch * batch_size:(
+                batch + 1) * batch_size]
+            self.actions = actions[batch * batch_size:(batch + 1) * batch_size]
+            self.action_probabilities = action_probabilities[batch *
+                    batch_size:(batch + 1) * batch_size]
             # Compute the normalized advantage
             baseline = self.critic.predict(self.states).data
-            discounted_rewards = torch.Tensor(self.discounted_rewards).to(
-                    self.device).unsqueeze(1)
+            discounted_rewards = torch.Tensor(self.discounted_rewards
+                    ).unsqueeze(1).to(self.device)
             advantage = discounted_rewards - baseline
             self.advantage = (advantage - advantage.mean()) / \
                     (advantage.std() + 1e-8)
@@ -239,16 +235,20 @@ class TRPO(object):
             # Compute the gradient of the surrogate loss
             self.actor.zero_grad()
             surrogate_loss.backward(retain_graph = True)
-            policy_gradient = p2v(param.grad for param
-                    in self.actor.parameters()).squeeze(0)
+            # Parameter to vector
+            vector = []
+            [vector.append(param.view(-1)) for param in
+                    self.actor.parameters()]
+            vector = torch.cat(vector)
+            policy_gradient = vector.squeeze(0)
             if policy_gradient.nonzero().size()[0]:
                 # Conjugate gradient to determine the step direction
                 step_direction = self.conjugate_gradient(-policy_gradient)
                 step_direction_variable = torch.autograd.Variable(
                         torch.from_numpy(step_direction))
                 # Linesearch to determine the step size
-                hessian = self.compute_hessian_vector_product(
-                        step_direction_variable).cpu().numpy().T
+                hessian = self.hessian_vector_product(step_direction_variable
+                    ).cpu().numpy().T
                 lm = np.sqrt(0.5 * step_direction.dot(hessian) / self.epsilon)
                 full_step = step_direction / lm
                 gradient_dot_step_direction = -policy_gradient.dot(
@@ -256,17 +256,18 @@ class TRPO(object):
                 theta = self.linesearch(p2v(self.actor.parameters()),
                         full_step, gradient_dot_step_direction / lm)
                 # Fit the estimated value to the observed discounted rewards
-                evaluation_before = explained_variance_1d(
-                        baseline.squeeze(1).cpu().numpy(),
-                        self.discounted_rewards)
-                self.critic.zero_grad()
-                critic_parameters = p2v(self.critic.parameters())
-                self.critic.fit(self.states, torch.autograd.Variable(
-                    torch.Tensor(self.discounted_rewards).to(self.device)))
-                evaluation_after = explained_variance_1d(
-                        self.critic.predict(
-                            self.states).data.squeeze(1).cpu().numpy(),
-                        self.discounted_rewards)
+                if self.discounted_rewards.ndim == 1:
+                    evaluation_before = explained_variance_1d(
+                            baseline.squeeze(1).cpu().numpy(),
+                            self.discounted_rewards)
+                    self.critic.zero_grad()
+                    critic_parameters = p2v(self.critic.parameters())
+                    self.critic.fit(self.states, torch.autograd.Variable(
+                        torch.Tensor(self.discounted_rewards).to(self.device)))
+                    evaluation_after = explained_variance_1d(
+                            self.critic.predict(
+                                self.states).data.squeeze(1).cpu().numpy(),
+                            self.discounted_rewards)
                 if evaluation_after < evaluation_before or \
                         np.abs(evaluation_after) < 1e-4:
                             v2p(critic_parameters, self.critic.parameters())
@@ -285,4 +286,4 @@ class TRPO(object):
                     ('Evaluation after', evaluation_after)])
                 for k, v in diagnostics.items():
                     print('{}: {}'.format(k, v))
-        return total_reward
+                return total_reward

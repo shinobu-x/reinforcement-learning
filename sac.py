@@ -1,4 +1,3 @@
-import gym
 import numpy as np
 import random
 import torch
@@ -64,7 +63,7 @@ class DoubleCritic(nn.Module):
 
     def forward(self, state, action):
         x = torch.cat([state, action], 2)
-        return self.Q1.forward(x), self.Q2.forward(x)
+        return self.Q1(x), self.Q2(x)
 
 class SAC(object):
     def __init__(self, state_space, action_space, action_space_shape,
@@ -112,6 +111,8 @@ class SAC(object):
         else:
             state, action, next_state, reward, not_done = \
                     replay_buffer.sample()
+        reward = reward.unsqueeze(1)
+        not_done = not_done.unsqueeze(1)
         Q1_current, Q2_current = self.critic(state, action)
         with torch.no_grad():
             next_action, entropy, mean = self.policy.sample(next_state)
