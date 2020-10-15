@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 from scipy import signal
+from torch import nn
 
 class RunningState(object):
     def __init__(self, shape):
@@ -70,6 +71,11 @@ def v2p(vector, parameters):
         num_param = param.numel()
         param.data = vector[pointer:pointer + num_param].view_as(param).data
         pointer += num_param
+
+def init_weight(m):
+    if type(m) in [nn.Linear, nn.Conv2d]:
+        nn.init.kaiming_uniform(m.weight)
+        m.bias.data.fill_(0.0)
 
 def flatten(list):
     return [item for sub_list in list for item in sub_list]
