@@ -118,6 +118,23 @@ class MakeEnv(object):
         self.env = ImageToPyTorch(self.env)
         self.env = BufferWrapper(self.env, 4)
         self.env = ScaledFloatFrame(self.env)
+        self.is_continous = type(self.env.action_space) is gym.spaces.box.Box
+        if self.is_continous:
+            self.action_space = self.env.action_space.shape[0]
+        else:
+            self.action_space = self.env.action_space.n
+        self.state_space = self.env.observation_space.shape[0]
 
     def init(self):
         return self.env
+
+def get_env_space(env_name):
+    env = gym.make(env_name)
+    is_continous = type(env.action_space) is gym.spaces.box.Box
+    if is_continous:
+        action_space = env.action_space.shape[0]
+    else:
+        action_space = env.action_space.n
+    state_space = env.observation_space.shape[0]
+    return state_space, action_space, is_continous
+
