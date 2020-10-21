@@ -76,45 +76,54 @@ class Learner(object):
 
 class A3C(object):
     def __init__(self, env):
+        self.device = torch.device('cuda' if torch.cuda.is_available() \
+                else 'cpu')
         self.env = env
         self.steps = 1000
         self.gamma = 1e-2
         self.tau = 1e-2
         self.state_space = env.observation_space.shape[0]
         self.action_space = env.action_space.n
-        self.shared_model = Agent(self.state_space, self.action_space)
+        self.shared_model = Agent(self.state_space, self.action_space).to(
+                self.device)
         self.shared_model_optimizer = optim.Adam(self.shared_model.parameters(),
                 lr = 3e-4, weight_decay = 1e-1)
 
-    def train(self):
+    def train(self, rank):
         learner = Learner(None, self.env, None)
-        learner.model = Agent(self.state_space, self.action_space)
+        learner.model = Agent(self.state_space, self.action_space).to(
+                self.device)
         learner.state = learner.env.reset()
-        learner.state = torch.from_numpy(learner.state).float()
+        learner.state = torch.from_numpy(learner.state).float().to(self.device)
         learner.model = deepcopy(self.shared_model)
         while True:
             if learner.done:
-                learner.hx = torch.autograd.Variable(torch.zeros(1, 512))
-                learner.cx = torch.autograd.Variable(torch.zeros(1, 512))
+                learner.hx = torch.autograd.Variable(torch.zeros(1, 512)).to(
+                        self.device)
+                learner.cx = torch.autograd.Variable(torch.zeros(1, 512)).to(
+                        self.device)
             else:
-                learner.hx = torch.autograd.Variable(learner.hx.data)
-                learner.cx = torch.autograd.Variable(learner.cx.data)
+                learner.hx = torch.autograd.Variable(learner.hx.data).to(
+                        self.device)
+                learner.cx = torch.autograd.Variable(learner.cx.data).to(
+                        self.device)
             for step in range(self.steps):
                 learner.act(learner.state, learner.hx, learner.cx)
                 if learner.done:
                     break
             if learner.done:
                 state = learner.env.reset()
-                learner.state = torch.from_numpy(state).float()
+                learner.state = torch.from_numpy(state).float().to(self.device)
             R = torch.zeros(1, 1)
             if not learner.done:
-                state = torch.autograd.Variable(learner.state.unsqueeze(0))
+                state = torch.autograd.Variable(learner.state.unsqueeze(0)).to(
+                        self.device)
                 value, _, _ = learner.model(state, (learner.hx, learner.cx))
-                R = torch.autograd.Variable(value.data)
+                R = torch.autograd.Variable(value.data).to(self.device)
             learner.values.append(R)
             policy_loss = 0.0
             value_loss = 0.0
-            GAE = torch.zeros(1, 1)
+            GAE = torch.zeros(1, 1).to(self.device)
             for i in reversed(range(len(learner.rewards))):
                 R = self.gamma * R + learner.rewards[i]
                 A = R - learner.values[i]
