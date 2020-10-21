@@ -73,9 +73,21 @@ def v2p(vector, parameters):
         pointer += num_param
 
 def init_weight(m):
-    if type(m) in [nn.Linear, nn.Conv2d]:
-        nn.init.kaiming_uniform(m.weight)
-        m.bias.data.fill_(0.0)
+    classname = m.__class__.__name__
+    weight_shape = list(m.weight.data.size())
+    m.bias.data.fill_(0)
+    if classname.find('Conv') != -1:
+        l = np.prod(weight_shape[1: 4])
+        r = np.prod(weight_shape[2: 4]) * weight_shape[0]
+    elif classname.find('Linear') != -1:
+        l = np.prod(weight_shape[1])
+        r = np.prod(weight_shape[0])
+    bound = np.sqrt(6.0 / (l + r))
+    m.weight.data.uniform_(-bound, bound)
+
+def columnwise_init(weights, std = 1.0):
+    x = torch.randn(weights.size())
+    return std / torch.sqrt((x ** 2).sum(1, keepdim = True))
 
 def flatten(list):
     return [item for sub_list in list for item in sub_list]
