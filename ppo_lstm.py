@@ -14,26 +14,33 @@ class Actor(nn.Module):
             log_std_max = 2, log_std_min = -20):
         super(Actor, self).__init__()
         self.l1 = nn.Linear(state_space, 100)
-        self.l2 = nn.Linear(100, 500)
-        self.l3 = nn.Linear(500, action_space)
+        self.l2 = nn.Linear(100, 512)
+        self.l3 = nn.Linear(256, action_space)
+        self.lstm = nn.LSTMCell(512, 256)
+        self.device = torch.device('cuda' if torch.cuda.is_available() \
+                else 'cpu')
+        self.hx = torch.autograd.Variable(torch.zeros(1, 256)).to(self.device)
+        self.cx = torch.autograd.Variable(torch.zeros(1, 256)).to(self.device)
         self.log_std = nn.Parameter(torch.zeros(1, action_space))
-        self.modules = [self.l1, self.l2, self.l3, self.log_std]
+        self.modules = [self.l1, self.l2, self.lstm, self.l3, self.log_std]
         self.modules_old = [None]*len(self.modules)
         self.backup()
 
-    def forward(self, state):
+    def forward(self, state, hx, cx):
         a = F.relu(self.l1(state))
         a = F.relu(self.l2(a))
-        mean = self.l3(a)
+        hx, cx = self.lstm(a.view(a.size(0), -1)[:1], (hx, cx))
+        mean = self.l3(hx)
         log_std = self.log_std.expand_as(mean)
         std = torch.exp(log_std)
         return mean, log_std, std
 
-    def reference(self, state):
+    def reference(self, state, hx, cx):
         a = F.relu(self.modules_old[0](state))
         a = F.relu(self.modules_old[1](a))
-        mean_old = self.modules_old[2](a)
-        log_std_old = self.modules_old[3].expand_as(mean_old)
+        hx, cx = self.modules_old[2](a.view(a.size(0), -1)[:1], (hx, cx))
+        mean_old = self.modules_old[3](hx)
+        log_std_old = self.modules_old[4].expand_as(mean_old)
         std_old = torch.exp(log_std_old)
         return mean_old, log_std_old, std_old
 
@@ -42,21 +49,33 @@ class Actor(nn.Module):
             self.modules_old[index] = deepcopy(self.modules[index])
 
 class Critic(nn.Module):
-    def __init__(self, state_space):
+    def __init__(self, state_space, batch_size):
         super(Critic, self).__init__()
+        self.batch_size = batch_size
+        self.input_size = 512
+        self.hidden_size = 256
         self.l1 = nn.Linear(state_space, 100)
-        self.l2 = nn.Linear(100, 500)
-        self.l3 = nn.Linear(500, 1)
+        self.l2 = nn.Linear(100, self.input_size)
+        self.l3 = nn.Linear(self.hidden_size // self.batch_size, 1)
+        self.lstm = nn.LSTMCell(self.input_size, self.hidden_size)
+        self.device = torch.device('cuda' if torch.cuda.is_available() \
+                else 'cpu')
+        self.hx = torch.autograd.Variable(torch.zeros(1, self.hidden_size)).to(
+                self.device)
+        self.cx = torch.autograd.Variable(torch.zeros(1, self.hidden_size)).to(
+                self.device)
 
-    def forward(self, x):
+    def forward(self, x, hx, cx):
         q = F.relu(self.l1(x))
         q = F.relu(self.l2(q))
-        q = self.l3(q)
+        hx, cx = self.lstm(q.view(q.size(0), -1)[:1], (hx, cx))
+        q = self.l3(hx.view(self.batch_size, 1, -1))
         return q
 
-class PPO(object):
-    def __init__(self, state_space, action_space, epsilon = 1e-3, gamma = 0.99,
-            tau = 0.9, noise = 1e-4):
+class PPOLSTM(object):
+    def __init__(self, state_space, action_space, batch_size, epsilon = 1e-3,
+            gamma = 0.99, tau = 0.9, noise = 1e-4):
+        self.batch_size = batch_size
         self.epsilon = epsilon
         self.gamma = gamma
         self.tau = tau
@@ -66,7 +85,7 @@ class PPO(object):
         self.policy = Actor(state_space, action_space).to(self.device)
         self.policy_optimizer = optim.Adam(self.policy.parameters(),
                 lr = 3e-4, weight_decay = 1e-1)
-        self.critic = Critic(state_space).to(self.device)
+        self.critic = Critic(state_space, self.batch_size).to(self.device)
         self.critic_optimizer = optim.Adam(self.critic.parameters(),
                 lr = 3e-4, weight_decay = 1e-1)
         self.running_state = Filtering(state_space)
@@ -96,7 +115,15 @@ class PPO(object):
         return advantages, value_target
 
     def update_parameters(self, states, actions, rewards, not_done):
-        values = self.critic(states)
+        self.policy.hx = torch.autograd.Variable(self.policy.hx.data).to(
+                self.device)
+        self.policy.cx = torch.autograd.Variable(self.policy.cx.data).to(
+                self.device)
+        self.critic.hx = torch.autograd.Variable(self.critic.hx.data).to(
+                self.device)
+        self.critic.cx = torch.autograd.Variable(self.critic.cx.data).to(
+                self.device)
+        values = self.critic(states, self.critic.hx, self.critic.cx)
         advantages, value_target = self.compute_advantage(values, rewards,
                 not_done)
         critic_loss = torch.mean(torch.pow(values - torch.autograd.Variable(
@@ -104,10 +131,11 @@ class PPO(object):
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
         self.critic_optimizer.step()
-        mean, log_std, std = self.policy(states)
+        mean, log_std, std = self.policy(states, self.policy.hx, self.policy.cx)
         log_probability = compute_gaussian_log(actions, mean, log_std, std)
         with torch.no_grad():
-            mean_old, log_std_old, std_old = self.policy.reference(states)
+            mean_old, log_std_old, std_old = self.policy.reference(states,
+                    self.policy.hx, self.policy.cx)
             log_probability_old = compute_gaussian_log(actions, mean_old,
                     log_std_old, std_old)
         self.policy.backup()
