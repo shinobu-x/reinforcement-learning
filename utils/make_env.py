@@ -138,3 +138,15 @@ def get_env_space(env_name):
     state_space = env.observation_space.shape[0]
     return state_space, action_space, is_continous
 
+def multi_agent_make_env(scenario_name, benchmark = False):
+    from multiagent import scenarios
+    from multiagent.environment import MultiAgentEnv
+    scenario = scenarios.load(scenario_name + '.py').Scenario()
+    world = scenarios.make_world()
+    if benchmark:
+        env = MultiAgentEnv(world, scenario.reset_world, scenario.reward,
+                scenario.observation, scenario.benchmark_data)
+    else:
+        env = MultiAgentEnv(world, scenario.reset_world, scenario.reward,
+                scenario.observation)
+    return env
