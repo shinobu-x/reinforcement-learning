@@ -32,7 +32,7 @@ class ExponentialMovingAverageLoss(Function):
         return x_logsumexp
 
     @staticmethod
-    def backward(context, grad_output):
+    def backward(context, grad_output, epsilon = 1e-3):
         x, running_mean = context.save_tensors
         grad = grad_output * x.exp().detach() / (running_mean + epsilon) / \
                 x.shape[0]
