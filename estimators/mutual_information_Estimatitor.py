@@ -8,6 +8,8 @@ from torch.optim import Adam
 from torch_lightning import Trainer
 from ..utils.misc import get_batch
 
+# MINE: Mutual Information Neural Estimation
+# https://arxiv.org/abs/1801.04062
 def compute_exponential_moving_average(mu, alpha, running_mean):
     return alpha * mu + (1.0 - alpha) * running_mean
 
@@ -37,9 +39,9 @@ class ExponentialMovingAverageLoss(Function):
         return grad, None
 
 class BaseModel(nn.Module):
-    def __init__(self, x_shape, y_shape):
+    def __init__(self, x_shape, z_shape):
         self.layers = nn.Sequential(
-                nn.Linear(x_shape + y_shape, 400),
+                nn.Linear(x_shape + z_shape, 400),
                 nn.ReLU(),
                 nn.Linear(400, 400),
                 nn.ReLU(),
@@ -47,43 +49,45 @@ class BaseModel(nn.Module):
                 nn.ReLU(),
                 nn.Linear(400, 1))
 
-    def forward(self, x, y):
-        return self.layer(x, y)
+    def forward(self, x, z):
+        return self.layer(x, z)
 
 class MutualIformationEstimator(nn.Module):
-    def __init__(self, x_shape, y_shape, loss = None, alpha = 1e-2,
+    def __init__(self, x_shape, z_shape, loss = None, alpha = 1e-2,
             method = None):
         super().__init__()
         self.running_mean = 0
         self.loss = loss
         self.alpha = alpha
-        self.model = BaseModel(x_shape, y_shape)
+        self.model = BaseModel(x_shape, z_shape)
         self.device = torch.device('cuda' if torch.cuda.is_available()
                 else 'cpu')
 
-    def forward(self, x, y, y_marginal = None):
-        if y_marginal is None:
-            y_marginal = y[torch.randperm(x.shape[0])]
-        first_term = mean = self.model(x, y).mean()
-        mean_marginal = self.model(x, y_marginal)
+    def forward(self, x, z, z_marginal = None):
+        if z_marginal is None:
+            z_marginal = z[torch.randperm(x.shape[0])]
+        first_term = mean = self.model(x, z).mean()
+        mean_marginal = self.model(x, z_marginal)
         second_term, self.running_mean = exponential_moving_average_loss(
-                y_marginal, self.running_mean, self.alpha)
-        # second_term = torch.exp(y_marginal - 1).mean() # F-divergence
-        return -first_term + second_term
+                z_marginal, self.running_mean, self.alpha)
+        # second_term = torch.exp(z_marginal - 1).mean() # F-divergence
+        # V(\theta) <- 1/b * \sum^b_{i=1} T_\theta(x^i, z^i) -
+        # log(1/b * \sum^b_{i=1} * e^{T_\theta(x^i, z^i)})
+        return first_term - second_term
 
-    def compute_mutual_information(self, x, y, y_marginal = None):
+    def compute_mutual_information(self, x, z, z_marginal = None):
         with torch.no_grad():
-            return -self.forward(x, y, y_marginal)
+            return -self.forward(x, z, z_marginal)
 
-    def train(self, x, y, num_iters, batch_size, optimizer):
+    def train(self, x, z, num_iters, batch_size, optimizer):
         if optimizer is None:
             optimizer = Adam(self.parameters(), lr = 1e-4)
         for i in range(1, num_iters + 1):
             mu = 0
-            for x_i, y_i in get_batch(x, y, batch_size):
+            for x_i, z_i in get_batch(x, z, batch_size):
                 optimizer.zero_grad()
-                loss = self.forward(x, y)
+                loss = self.forward(x_i, z_i)
                 loss.backward()
                 optimizer.step()
                 mu -= loss.item()
-        return compute_mutual_information(x, y)
+        return compute_mutual_information(x, z)
