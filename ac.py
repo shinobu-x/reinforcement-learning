@@ -112,6 +112,6 @@ for episode in range(1, num_episodes):
         print('Episode {}\tLast reward: {:.2f}\tAverage reward: {:.2f}'.
                 format(episode, episode_reward, total_discounted_reward))
     if total_discounted_reward > env.spec.reward_threshold:
-        print("Average Reward: {}\tThe last episode runs: {} time steps!".
+        print("Average Reward: {}\nThe last episode runs: {} time steps".
                 format(total_discounted_reward, t))
         break
