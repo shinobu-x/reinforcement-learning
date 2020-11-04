@@ -19,7 +19,6 @@ class ReplayBuffer(object):
         return batch_size <= self.position
 
     def store(self, state, action, next_state, reward, not_done):
-        print(action)
         self.state[self.position] = state
         self.action[self.position] = action
         self.next_state[self.position] = next_state
