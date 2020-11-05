@@ -1,6 +1,6 @@
 import torch
 
-def compute_gradient(outputs, inputs, grad_outputs = None, retain_graph = None,
+def compute_gradient(outputs, inputs, grad_outputs = None, retain_graph = False,
         create_graph = False):
     outputs = [outputs] if torch.is_tensor(outputs) else list(outputs)
     inputs = [inputs] if torch.is_tensor(inputs) else list(inputs)

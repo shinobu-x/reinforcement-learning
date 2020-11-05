@@ -1,7 +1,7 @@
 import torch
 from compute_gradient import compute_gradient
 
-def compute_jacobian(outputs, inputs, create_graph = True):
+def compute_jacobian(outputs, inputs, create_graph = False):
     outputs = [outputs] if torch.is_tensor(outputs) else list(outputs)
     inputs = [inputs] if torch.is_tensor(inputs) else list(inputs)
     jacobian = []
