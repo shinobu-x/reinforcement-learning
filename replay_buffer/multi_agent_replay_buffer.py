@@ -1,32 +1,34 @@
 import numpy as np
+import random
 import torch
 
-class MultiAgentReplayBuffer:
-    def __init__(self, num_agents, capacity):
+class ReplayBuffer(object):
+    def __init__(self, state_space, action_space, num_agents, capacity):
         self.capacity = capacity
-        self.num_agents = num_agents
         self.batch_size = 0
+        self.num_agents = num_agents
         self.buffer = []
 
     def buffered(self, batch_size):
         self.batch_size = batch_size
-        return self.batch_size <= len(self.buffer)
+        return batch_size <= self.position
 
-    def store(slef, state, action, next_state, reward, done):
-        self.buffer.append((state, action, next_state, reward, done))
+    def store(self, state, action, next_state, reward, not_done):
+        self.buffer.append((state, action, np.array(reward), next_state,
+            not_done))
 
     def sample(self):
         states = [[] for _ in range(self.num_agents)]
         actions = [[] for _ in range(self.num_agents)]
         next_states = [[] for _ in range(self.num_agents)]
         rewards = [[] for _ in range(self.num_agents)]
-        dones = []
         global_states = []
         global_actions = []
         global_next_states = []
-        dynamics = random.sample(self.buffer, self.batch_size)
-        for experience in dynamics:
-            state, action, next_state, reward, done = experience
+        dones = []
+        batch = random.sample(self.buffer, self.batch_size)
+        for experience in batch:
+            state, action, next_state, reward, not_done = experience
             for i in range(self.num_agents):
                 state = state[i]
                 action = action[i]
@@ -35,10 +37,9 @@ class MultiAgentReplayBuffer:
                 states[i].append(state)
                 actions[i].append(action)
                 next_states[i].append(next_state)
-                rewards[i].append(reward)
+                rewards[i].append(rewards)
             global_states.append(np.concatenate(state))
-            global_actions.append(torch.cat(action))
+            global_actions.append(np.concatenate(action))
             global_next_states.append(np.concatenate(next_state))
-            dones.append(done)
-        return (states, actions, next_states, rewards, global_states,
-                global_actions, global_next_states, dones)
+        return states, actions, next_states, rewards, global_states, \
+                global_actions, global_next_states
