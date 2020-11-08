@@ -53,7 +53,7 @@ class EncoderNetwork(nn.Module):
         if self.enable_lstm:
             self.lstm = nn.LSTMCell(self.num_features, self.hidden_size)
 
-    def reset_internal_state(self, num_buffers = None, indices = None):
+    def operate_internal_state(self, num_buffers = None, indices = None):
         if self.enable_lstm:
             with torch.no_grad():
                 if indices is None:
@@ -239,6 +239,13 @@ class A2C(nn.Module):
         probability, features = self.actor(states)
         value = self.critic(states)
         return probability, value, features
+
+    def operate_buffer(self, num_buffers = None, indices = None):
+        if num_buffers is not None:
+            self.encoder_network.operate_internal_state(
+                    num_buffers = num_buffers)
+        else:
+            self.encoder_network.operate_internal_state(indices = indices)
 
     def select_action(self, states):
         probability, value, features = self.forward(states)
