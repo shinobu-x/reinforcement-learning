@@ -1,3 +1,7 @@
+import numpy as np
+import torch
+from torch import nn
+from torch.optim import Adam
 
 # Generative Adversarial Imitation Learning
 # https://arxiv.org/abs/1606.03476
@@ -61,6 +65,10 @@ class GAIL(object):
         self.critic = Critic(self.state_space, self.activation)
         self.discriminator = Discriminator(self.state_space, self.action_space,
                 self.activation)
+        self.policy_optimizer = Adam(self.policy.parameters(), lr = 1e-3)
+        self.critic_optimizer = Adam(self.critic.parameters(), lr = 1e-3)
+        self.discriminator_optimizer = Adam(self.discriminator.parameters(),
+                lr = 1e-3)
 
     def compute_advantage(self, values, rewards, not_done):
         batch_size = len(rewards)
