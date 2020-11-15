@@ -5,7 +5,7 @@ from torch.nn import init
 categorical = Categorical
 categorical.mode = lambda self: self.probs.argmax(dim = -1, keepdim = True)
 sample = categorical.sample
-lob_prob = categorical.log_prob
+log_prob = categorical.log_prob
 categorical.log_probs = lambda self, actions: log_prob(
         self, actions.squeeze(-1)).view(
                 actions.size(0), -1).sum(-1).unsqueeze(-1)
