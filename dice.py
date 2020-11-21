@@ -12,19 +12,19 @@ class Actor(nn.Module):
         self.l1 = nn.Linear(state_space, hidden_size)
         self.l2 = nn.Linear(hidden_size, hidden_size)
 
-    def forward(self, states):
-        return  F.relu(self.l2(F.relu(self.l1(states))))
+    def forward(self, state):
+        return  F.relu(self.l2(F.relu(self.l1(state))))
 
 class Critic(nn.Module):
-    def __init__(self, state_space):
+    def __init__(self, state_space, hidden_size):
         super(Critic, self).__init__()
         self.l1 = nn.Linear(state_space, hidden_size)
         self.l2 = nn.Linear(hidden_size, hidden_size)
         self.l3 = nn.Linear(hidden_size, 1)
 
     def forward(self, stetes):
-        x = F.relu(self.l2(F.relu(self.l1(states))))
-        return self.l3(x), x
+        x = F.relu(self.l2(F.relu(self.l1(state))))
+        return self.l3(x)
 
 class Discriminator(nn.Module):
     def __init__(self, state_space, action_space):
@@ -33,20 +33,85 @@ class Discriminator(nn.Module):
         self.l2 = nn.Linear(128, 128)
         self.l3 = nn.Linear(128, 1)
 
-    def forward(self, states, actions):
-        x = torch.cat([states, actions], dim = -1)
+    def forward(self, state, action):
+        x = torch.cat([state, action], dim = -1)
         return self.l3(F.relu(self.l2(F.relu(self.l1(x)))))
 
-class Base(nn.Module):
-    def __init__(self, state_space, enable_recurrent = False, hidden_size = 64):
-        super(Base, self).__init__(state_space, enable_recurrent, hidden_size)
-        self.enable_recurrent = enable_recurrent
+class BaseNN(nn.Module):
+    def __init__(self, enable_rnn, rnn_num_inputs, hidden_size):
+        super(BaseNN, self).__init__()
+        self.hidden_size = hidden_size
+        self.enable_rnn = enable_rnn
+        if enable_rnn:
+            self.gru = nn.GRU(rnn_num_inputs, hidden_size)
+            for name, param in self.gru.named_parameters():
+                if 'bias' in name: nn.init.constant_(param, 0)
+                elif 'weight' in name: nn.init.orthogonal_(param)
+
+    def gru_forward(self, state, hxs, masks):
+        if state.size(0) == hxs.size(0):
+            x, hxs = self.gru(state.unsqueeze(0), (hxs * masks).unsqueeze(0))
+            x = x.squeeze(0)
+            hxs = hxs.squeeze(0)
+        else:
+            n = hxs.size(0)
+            t = int(x.size(0) / n)
+            x = x.view(t, n, x.size(1))
+            masks = masks.view(t, n)
+            is_zero = ((mask[1:] == 0.0) \
+                    .any(dim = -1).nonzero().squeeze().cpu())
+            if is_zero.dim() == 0: is_zero = [is_zero.item() + 1]
+            else: is_zero = (is_zero + 1).numpy().tolist()
+            is_zero = [0] + is_zero + [t]
+            hxs = hxs.unsqueeze(0)
+            output = []
+            for i in range(len(is_zero) - 1):
+                start = is_zero[i]
+                end = is_zero[i + 1]
+                scores, hxs = self.gru(x[start: end],
+                        hxs * masks[start].view(1, -1, 1))
+                outputs.append(scores)
+
+            x = torch.cat(outputs, dim = 0)
+            x = x.view(t * n, -1)
+            hxs = hxs.squeeze(0)
+        return x, hxs
+
+class BaseModel(BaseNN):
+    def __init__(self, state_space, enable_rnn = False, hidden_size = 64):
+        super(BaseModel, self).__init__(state_space, enable_rnn, hidden_size)
+        if enable_rnn: state_space = hidden_size
         self.actor = Actor(state_space, hidden_size)
         self.critic = Critic(state_space, hidden_size)
-        self.gru = GRU(state_space, hidden_size)
 
-    def forward(self, states, hxs, masks):
-        if self.enable_recurrent:
-            states, hxs = self.gru(states, hxs, masks)
-        actor_hidden_state = self.actor(states)
-        value, critic_hidden_state = self.critic(states)
+    def forward(self, state, hxs, masks):
+        if self.enable_rnn:
+            state, hxs = self.gru_forward(state, hxs, masks)
+        hx_actor = self.actor(state)
+        value = self.critic(state)
+        return value, actor_hx, hxs
+
+class Agent(nn.Module):
+    def __init__(self, state_space, action_space, enable_rnn = False):
+        super(Agent, self).__init__()
+        self.base_model = BaseModel(state_space, enable_rnn = True)
+        #self.base_model = base_model(state_space, enable_rnn = True)
+        num_outputs = action_space
+        self.dist = Categorical(self.base_model.hidden_size, num_outputs)
+
+    def select_action(self, states, hxs, masks, deterministic = False,
+            reparam = False):
+        value, actor_hx, hxs = self.base_model(states, hxs, masks)
+        dist = self.dist(actor_hx)
+        if deterministic: action = dist.mode()
+        elif reparam: action = dist.rsample()
+        else: action = dist.sample()
+        log_probabilities = dist.log_probs(action)
+        return value, action, log_probabilities, hxs
+
+    def get_value(self, states, hxs, masks, action):
+        value, actor_hx, hxs = self.base_model(states, hxs, masks)
+        dist = self.dist(actor_hx)
+        log_probabilities = dist.log_probs(action)
+        entropy = dist.entropy().mean()
+        return value, log_probabilities, entropy, hxs
