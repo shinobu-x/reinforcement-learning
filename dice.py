@@ -1,8 +1,10 @@
 import torch
 import torch.nn.functional as F
 from torch import nn
+from torch.optim import Adam
 from distributions.categorical import Categorical
 from modules.gru import GRU
+from utils.compute_regularization import compute_regularization
 
 # DiCE: The Infinitely Differentiable Monte-Carlo Estimator
 # https://arxiv.org/abs/1802.05098
@@ -115,3 +117,28 @@ class Agent(nn.Module):
         log_probabilities = dist.log_probs(action)
         entropy = dist.entropy().mean()
         return value, log_probabilities, entropy, hxs
+
+class DICE():
+    def __init__(self, env):
+        self.state_space = env.observation_space.shape[0]
+        self.action_space = env.action_space.n
+        self.agent = Policy(self.state_space, self.action_space,
+                enable_rnn = True)
+        discriminator = Discriminator(self.state_space, self.action_space)
+        self.clipping = 0.2
+        self.regularization_type = 'KL'
+        self.value_loss_coefficient = 0.5
+        self.entropy_coefficient = 1e-2
+        self.gamma = 0.99
+        self.lambda = 0.9
+        self.lr = 0.9
+        self.epsilon = 0.01
+        self.max_grad_norm = None
+        self.use_clipped_value_loss = False
+        self.enable_orthogonal_normalization = True
+        self.num_discriminator_trains = 1
+        self.discriminator_lr = 0.9
+        self.policy_optimizer = Adam(policy.parameters(), lr = self.lr,
+                eps = self.epsilon)
+        self.optimizer_discriminator = Adam(discriminator.parameters(),
+                lr = self.discriminator_lr * self.lr, eps = self.epsilon)

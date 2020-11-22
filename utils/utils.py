@@ -2,9 +2,11 @@ import numpy as np
 import torch
 from scipy import signal
 from torch import nn
-from compute_jacobian import compute_jacobian
-from compute_maximum_eigenvalues import compute_maximum_eigenvalues
-from compute_overestimations import compute_overestimations
+from utils.compute_jacobian import compute_jacobian
+from utils.compute_maximum_eigenvalues import compute_maximum_eigenvalues
+from utils.compute_overestimations import compute_overestimations
+from utils.compute_orthogonal_regularization import \
+        compute_orthogonal_regularization
 
 class RunningState(object):
     def __init__(self, shape):
