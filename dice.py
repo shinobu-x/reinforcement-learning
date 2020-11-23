@@ -118,7 +118,7 @@ class Agent(nn.Module):
         entropy = dist.entropy().mean()
         return value, log_probabilities, entropy, hxs
 
-class DICE():
+class DICE(object):
     def __init__(self, env):
         self.state_space = env.observation_space.shape[0]
         self.action_space = env.action_space.n
