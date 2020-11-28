@@ -52,7 +52,7 @@ class DDPG(object):
         self.update_params(self.policy, self.policy_target)
         self.update_params(self.critic, self.critic_target)
 
-    def update_params(self, source, target, is_soft = False):
+    def update_parameters(self, source, target, is_soft = False):
         if is_soft:
             for source_param, target_param in zip(source.parameters(),
                     target.parameters()):
@@ -88,6 +88,6 @@ class DDPG(object):
         policy_loss = policy_loss.mean()
         policy_loss.backward()
         self.policy_optimizer.step()
-        self.update_params(self.policy, self.policy_target, is_soft = True)
-        self.update_params(self.critic, self.ciritc_target, is_soft = True)
+        self.update_parameters(self.policy, self.policy_target, is_soft = True)
+        self.update_parameters(self.critic, self.ciritc_target, is_soft = True)
         return ciritc_loss.item(), policy_loss.item()
