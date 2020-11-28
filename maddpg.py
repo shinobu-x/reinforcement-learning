@@ -4,6 +4,8 @@ from copy import deepcopy
 from torch import nn
 from torch.optim import Adam
 
+# Multi-Agent Actor-Critic for Mixed Cooperative-Competitive Environments
+# https://arxiv.org/abs/1706.02275
 class Actor(nn.Module):
     def __init__(self, state_space, action_space):
         super(Actor, self).__init__()
