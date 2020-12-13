@@ -1,19 +1,56 @@
 import numpy as np
+import random
+from collections import namedtuple
+import torch
+import torch.nn.functional as F
+from torch import nn
+from torch.autograd import Variable
+
+dynamics = namedtuple('Dynamics', ('state', 'action', 'next_state', 'reward'))
+class ReplayBuffer(object):
+    def __init__(self, capacity):
+        self.capacity = capacity
+        self.memory = []
+        self.position = 0
+
+    def is_buffered(self, batch_size):
+        return batch_size < len(self.memory)
+
+    def store(self, *args):
+        if len(self.memory) < self.capacity:
+            self.memory.append(None)
+        self.memory[self.position] = dynamics(*args)
+        self.position = (self.position + 1) % self.capacity
+
+    def sample(self, batch_size):
+        return random.sample(self.memory, batch_size)
+
+class DQN(nn.Module):
+    def __init__(self, state_space, action_space):
+        super(DQN, self).__init__()
+        self.l1 = nn.Linear(state_space, 100)
+        self.l2 = nn.Linear(100, 500)
+        self.l3 = nn.Linear(500, action_space)
+
+    def forward(self, state):
+        x = F.relu(self.l1(state))
+        x = F.relu(self.l2(x))
+        return self.l3(a)
 
 class GridWorld(object):
-    def __init__():
+    def __init__(self):
         self.satte = np.zeros((4, 4, 4))
         self.player = np.array([0, 0, 0, 1])
         self.wall = np.array([0, 0, 1, 0])
         self.pit = np.array([0, 1, 0, 0])
         self.goal = np.array([1, 0, 0, 0])
 
-    def find(state, obj):
+    def find(self, state, obj):
         for i in range(0, 4):
             for j in range(0, 4):
                 if (state[i, j] == obj).all(): return i, j
 
-    def init_grid():
+    def init_grid(self):
         state = self.state
         state[0, 1] = self.player
         state[2, 2] = self.wall
@@ -21,7 +58,7 @@ class GridWorld(object):
         state[3, 3] = self.goal
         return state
 
-    def init_player(random = False):
+    def init_player(self, random = False):
         state = self.state
         state[(np.random.randint(0, 4), np.random.randint(0, 4))] = self.player
         if random:
@@ -42,7 +79,7 @@ class GridWorld(object):
         return init_player() \
                 if (not player or not wall or not pit or not goal) else state
 
-    def move(state, action):
+    def move(self, state, action):
         player = find(state, self.player)
         wall = find(state, self.wall)
         pit = find(state, self.pit)
@@ -61,12 +98,12 @@ class GridWorld(object):
         state[goal][0] = 1
         return state
 
-    def get_pos(state, index):
+    def get_pos(self, state, index):
         for i in range(0, 4):
             for j in range(0, 4):
                 if state[i, j][index] == 1: return i, j
 
-    def get_reward(state):
+    def get_reward(self, state):
         player = get_pos(state, 3)
         pit = get_pos(state, 1)
         goal = get_pos(state, 0)
@@ -74,7 +111,7 @@ class GridWorld(object):
         elif player == goal: return 10
         else: return -1
 
-    def display_state(state):
+    def display_state(self, state):
         grid = np.zeros((4, 4), dtype = str)
         player = find(state, self.player)
         wall = find(state, self.wall)
