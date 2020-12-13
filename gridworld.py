@@ -39,7 +39,7 @@ class DQN(nn.Module):
 
 class GridWorld(object):
     def __init__(self):
-        self.satte = np.zeros((4, 4, 4))
+        self.state = np.zeros((4, 4, 4))
         self.player = np.array([0, 0, 0, 1])
         self.wall = np.array([0, 0, 1, 0])
         self.pit = np.array([0, 1, 0, 0])
@@ -72,18 +72,18 @@ class GridWorld(object):
             state[2, 2] = self.wall
             state[1, 1] = self.pit
             state[1, 2] = self.goal
-        player = find(state, self.player)
-        wall = find(state, self.wall)
-        pit = find(state, self.pit)
-        goal = find(state, self.goal)
+        player = self.find(state, self.player)
+        wall = self.find(state, self.wall)
+        pit = self.find(state, self.pit)
+        goal = self.find(state, self.goal)
         return init_player() \
                 if (not player or not wall or not pit or not goal) else state
 
     def move(self, state, action):
-        player = find(state, self.player)
-        wall = find(state, self.wall)
-        pit = find(state, self.pit)
-        goal = find(state, self.goal)
+        player = self.find(state, self.player)
+        wall = self.find(state, self.wall)
+        pit = self.find(state, self.pit)
+        goal = self.find(state, self.goal)
         state = self.state
         actions = [[-1, 0], [1, 0], [0, -1], [0, 1]]
         pos = (player[0] + actions[action][0], player[1] + actions[action][1])
@@ -91,7 +91,7 @@ class GridWorld(object):
             if (np.array(pos) <= (3, 3)).all() and \
                     (np.array(pos) >= (0, 0)).all():
                 state[pos][3] = 1
-        if not find(state, self.player):
+        if not self.find(state, self.player):
             state[player] = self.player
         state[wall][2] = 1
         state[pit][1] = 1
@@ -113,10 +113,10 @@ class GridWorld(object):
 
     def display_state(self, state):
         grid = np.zeros((4, 4), dtype = str)
-        player = find(state, self.player)
-        wall = find(state, self.wall)
-        pit = find(state, self.pit)
-        goal = find(state, self.goal)
+        player = self.find(state, self.player)
+        wall = self.find(state, self.wall)
+        pit = self.find(state, self.pit)
+        goal = self.find(state, self.goal)
         for i in range(0, 4):
             for j in range(0, 4):
                 grid[i, j] = ''
