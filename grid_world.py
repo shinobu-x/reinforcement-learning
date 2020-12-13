@@ -35,7 +35,7 @@ class DQN(nn.Module):
     def forward(self, state):
         x = F.relu(self.l1(state))
         x = F.relu(self.l2(x))
-        return self.l3(a)
+        return self.l3(x)
 
 class GridWorld(object):
     def __init__(self):
@@ -120,8 +120,20 @@ class GridWorld(object):
         for i in range(0, 4):
             for j in range(0, 4):
                 grid[i, j] = ''
-        if player: gird[player] = 'P'
+        if player: grid[player] = 'P'
         if wall: grid[wall] = 'W'
         if pit: grid[pit] = '-'
         if goal: grid[goal] = '+'
         return grid
+
+grid_world = GridWorld()
+state = grid_world.init_grid()
+#print(grid_world.display_state(state))
+state = grid_world.init_player()
+#print(grid_world.display_state(state))
+state = grid_world.init_player(random = True)
+#print(grid_world.display_state(state))
+status = 1
+dqn = DQN(64, 4)
+state = Variable(torch.from_numpy(state).float())
+state_value = dqn(state.view(-1, 64))
